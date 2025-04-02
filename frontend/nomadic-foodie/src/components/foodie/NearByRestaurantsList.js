@@ -1,10 +1,34 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import Modal from 'react-bootstrap/Modal';
+import Button from 'react-bootstrap/Button';
+
+import {
+  collection,
+  getDocs,
+  getDoc,
+  doc,
+  getFirestore
+} from 'firebase/firestore';
+
 import back from '../../assets/back.png';
 import profileImg from '../../assets/profile.png';
 
 const NearByRestaurantsList = () => {
+  const [visiblePlaces, setVisiblePlaces] = useState([]);
+  const [firestorePlaces, setFirestorePlaces] = useState([]);
+  const [radius, setRadius] = useState(10);
+  const [minRating, setMinRating] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [selectedRestaurant, setSelectedRestaurant] = useState(null);
+  const [restaurantMenu, setRestaurantMenu] = useState([]);
+
+  const latLngRef = useRef(null);
+  const navigate = useNavigate();
+  const db = getFirestore();
+
   useEffect(() => {
     if (!sessionStorage.getItem('hasReloadedNearbyList')) {
       sessionStorage.setItem('hasReloadedNearbyList', 'true');
@@ -14,34 +38,49 @@ const NearByRestaurantsList = () => {
     }
   }, []);
 
-  const [visiblePlaces, setVisiblePlaces] = useState([]);
-  const [radius, setRadius] = useState(10);
-  const [minRating, setMinRating] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const latLngRef = useRef(null);
-  const navigate = useNavigate();
-
-  const goToHome = () => {
-    navigate('/userHome');
-  };
-
-  const goToProfile = () => {
-    navigate('/UserProfile');
-  };
+  const goToHome = () => navigate('/userHome');
+  const goToProfile = () => navigate('/UserProfile');
 
   const handleClick = (place) => {
-    navigate('/map', {
-      state: {
-        destination: place.position,
-        meta: {
-          name: place.name,
-          address: place.address,
-          rating: place.rating,
-          cuisine: place.cuisine
+    if (place.firestoreId) {
+      setSelectedRestaurant(place);
+      fetchRestaurantMenu(place.firestoreId);
+      setShowMenuModal(true);
+    } else {
+      navigate('/map', {
+        state: {
+          destination: place.position,
+          meta: {
+            name: place.name,
+            address: place.address,
+            rating: place.rating,
+            cuisine: place.cuisine
+          }
         }
-      }
-    });
+      });
+    }
   };
+
+  const fetchRestaurantMenu = async (restaurantId) => {
+    try {
+      const docRef = doc(db, "restaurant-menus", restaurantId);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const menu = data.menu || []; // 🟢 Fix is here
+        setRestaurantMenu(menu);
+        console.log("Loaded menu for", restaurantId, ":", menu);
+      } else {
+        console.warn("No menu document found for:", restaurantId);
+        setRestaurantMenu([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch menu:", error);
+      setRestaurantMenu([]);
+    }
+  };
+
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -58,6 +97,7 @@ const NearByRestaurantsList = () => {
   useEffect(() => {
     if (latLngRef.current) {
       fetchNearby(latLngRef.current);
+      fetchFirestoreRestaurants();
     }
   }, [radius, minRating]);
 
@@ -70,6 +110,7 @@ const NearByRestaurantsList = () => {
         };
         latLngRef.current = userLatLng;
         fetchNearby(userLatLng);
+        fetchFirestoreRestaurants();
       },
       () => alert("Geolocation failed.")
     );
@@ -91,7 +132,7 @@ const NearByRestaurantsList = () => {
       async (results, status) => {
         if (status !== gmaps.places.PlacesServiceStatus.OK || !results) {
           alert("No nearby restaurants found.");
-          setVisiblePlaces([]); // ✅ Restore this
+          setVisiblePlaces([]);
           setLoading(false);
           return;
         }
@@ -113,14 +154,12 @@ const NearByRestaurantsList = () => {
           let cuisine = "Unknown Cuisine";
           try {
             const FOURSQUARE_SERVER = process.env.REACT_APP_FOURSQUARE_SERVER_URL || 'http://localhost:5003';
-
             const res = await fetch(`${FOURSQUARE_SERVER}/api/foursquare/cuisine?lat=${lat}&lng=${lng}`);
             const data = await res.json();
             cuisine = data.cuisine;
           } catch (e) {
             console.warn("Cuisine fetch failed for:", place.name);
           }
-
 
           return {
             name: place.name,
@@ -135,9 +174,29 @@ const NearByRestaurantsList = () => {
 
         const resolvedPlaces = (await Promise.all(placePromises)).filter(Boolean);
         setVisiblePlaces(resolvedPlaces);
-        setLoading(false); // ✅ ✅ ✅ THIS WAS MISSING
+        setLoading(false);
       }
     );
+  };
+
+  const fetchFirestoreRestaurants = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "restaurantDetails"));
+      const restaurants = [];
+      querySnapshot.forEach(doc => {
+        const data = doc.data();
+        restaurants.push({
+          ...data,
+          firestoreId: doc.id,
+          photo: data.photo || "https://via.placeholder.com/100",
+          distance: "N/A",
+          position: data.location || { lat: 0, lng: 0 }
+        });
+      });
+      setFirestorePlaces(restaurants);
+    } catch (error) {
+      console.error("Error fetching Firestore restaurants:", error);
+    }
   };
 
   return (
@@ -146,11 +205,9 @@ const NearByRestaurantsList = () => {
         <div className="col-auto" style={{ cursor: 'pointer' }} onClick={goToHome}>
           <img src={back} style={{ width: '2rem', height: '2rem', margin: '10px' }} alt="Back" />
         </div>
-
         <div className="col text-center">
           <h2 className="m-0">Nearby Restaurants</h2>
         </div>
-
         <div className="col-auto" style={{ cursor: 'pointer' }} onClick={goToProfile}>
           <img src={profileImg} style={{ width: '2rem', height: '2rem', margin: '10px' }} alt="UserProfile" />
         </div>
@@ -184,12 +241,12 @@ const NearByRestaurantsList = () => {
           {loading ? (
             <span className="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
           ) : (
-            <strong>{visiblePlaces.length}</strong>
+            <strong>{firestorePlaces.length + visiblePlaces.length}</strong>
           )}
         </h4>
 
         <div className="list-group">
-          {visiblePlaces.map((place, index) => (
+          {[...firestorePlaces, ...visiblePlaces].map((place, index) => (
             <div
               key={index}
               className="list-group-item list-group-item-action d-flex align-items-center"
@@ -206,7 +263,7 @@ const NearByRestaurantsList = () => {
                 <h5 className="mb-1">{place.name}</h5>
                 <p className="mb-1 text-muted">{place.address}</p>
                 <div className="d-flex align-items-center flex-wrap gap-2">
-                  <span className="badge bg-secondary">{place.cuisine}</span>
+                  <span className="badge bg-secondary">{place.cuisine || 'N/A'}</span>
                   <small className="text-muted">Rating: {place.rating || 'N/A'} ⭐</small>
                   <small className="text-muted">• {place.distance} km away</small>
                 </div>
@@ -215,6 +272,35 @@ const NearByRestaurantsList = () => {
           ))}
         </div>
       </div>
+
+      <Modal show={showMenuModal} onHide={() => setShowMenuModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>{selectedRestaurant?.name} - Menu</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {restaurantMenu.length > 0 ? (
+            <ul className="list-group">
+              {restaurantMenu.map((item, index) => (
+                <li key={index} className="list-group-item">
+                  <div className="fw-bold">{item.name} - ₹{item.price}</div>
+                  <div className="text-muted">{item.description}</div>
+                  <small>
+                    Category: {item.category} | {item.isVeg ? "Veg 🥬" : "Non-Veg 🍗"}
+                  </small>
+                </li>
+              ))}
+            </ul>
+
+          ) : (
+            <p>No menu available.</p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowMenuModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
