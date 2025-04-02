@@ -72,7 +72,7 @@ function RestaurantHome() {
         </div>
 
         <div className="d-flex justify-content-between mt-4">
-          <button className="btn btn-outline-dark" onClick={() => navigate('/restaurantProfile')}>
+          <button className="btn btn-dark" onClick={() => navigate('/restaurantProfile')}>
             Edit UserProfile
           </button>
           <button className="btn btn-outline-dark" onClick={() => navigate('/addmenu')}>

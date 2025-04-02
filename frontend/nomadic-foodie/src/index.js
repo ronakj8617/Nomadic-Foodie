@@ -17,6 +17,7 @@ import RestaurantsSignUp from './components/restaurant/RestaurantsSignUp';
 import RestaurantHome from './components/restaurant/RestaurantHome';
 import RestaurantProfile from './components/restaurant/RestaurantProfile';
 import AddMenu from './components/restaurant/AddMenu';
+import 'leaflet/dist/leaflet.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

@@ -15,11 +15,30 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseconfig'; // Make sure this points to your Firestore instance
 import { useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
+import loadScript from 'load-script';
 
 function Login() {
   const [loginData, setLoginData] = useState({ email: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
+
+
+  // useEffect(() => {
+  //   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+  //   if (!window.google) {
+  //     loadScript(
+  //       `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`,
+  //       (err, script) => {
+  //         if (err) {
+  //           console.error('Google Maps script load error:', err);
+  //         } else {
+  //           console.log('✅ Google Maps Places API loaded');
+  //         }
+  //       }
+  //     );
+  //   }
+  // }, []);
+
 
   const handleChange = (e) => {
     setLoginData({ ...loginData, [e.target.name]: e.target.value });

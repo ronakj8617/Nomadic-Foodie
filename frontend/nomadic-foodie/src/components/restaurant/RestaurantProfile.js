@@ -1,21 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { auth, db } from '../../firebaseconfig';
 import {
-  doc,
-  getDoc,
-  updateDoc,
-  collection,
-  getDocs,
-  addDoc
+    doc,
+    getDoc,
+    updateDoc,
+    collection,
+    getDocs,
+    addDoc
 } from 'firebase/firestore';
 import {
-  onAuthStateChanged,
-  updateProfile,
-  updatePassword,
-  signOut
+    updatePassword
 } from 'firebase/auth';
 import bcrypt from 'bcryptjs';
 import { useNavigate } from 'react-router-dom';
+import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import usePlacesAutocomplete, { getGeocode, getLatLng } from 'use-places-autocomplete';
+import axios from 'axios';
 
 function RestaurantProfile() {
     const [formData, setFormData] = useState({
@@ -23,13 +23,116 @@ function RestaurantProfile() {
         city: '',
         contact: '',
         priceLevel: '',
-        cuisines: []
+        cuisines: [],
+        address: '',
+        latitude: 28.6139,
+        longitude: 77.2090
     });
     const [inputCuisine, setInputCuisine] = useState('');
-    const [loading, setLoading] = useState(true);
     const [newPassword, setNewPassword] = useState('');
-
+    const [loading, setLoading] = useState(true);
+    const mapRef = useRef(null);
     const navigate = useNavigate();
+
+    const fetchAddressFromCoords = async (lat, lng) => {
+        try {
+            const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+            const response = await axios.get(
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
+            );
+            const result = response.data.results[0];
+            if (result) {
+                setFormData(prev => ({
+                    ...prev,
+                    address: result.formatted_address,
+                    latitude: lat,
+                    longitude: lng
+                }));
+            }
+        } catch (err) {
+            console.error("Reverse geocoding failed:", err);
+        }
+    };
+
+    const handleLocateMe = () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser.");
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const { latitude, longitude } = pos.coords;
+                fetchAddressFromCoords(latitude, longitude);
+                if (mapRef.current) {
+                    mapRef.current.panTo({ lat: latitude, lng: longitude });
+                }
+            },
+            (err) => {
+                console.error("Location error:", err);
+                alert("Could not retrieve your location.");
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }
+        );
+    };
+
+    const AddressSearch = () => {
+        const {
+            ready,
+            value,
+            suggestions: { status, data },
+            setValue,
+            clearSuggestions,
+        } = usePlacesAutocomplete({
+            requestOptions: {
+                componentRestrictions: { country: ['in'] },
+            },
+        });
+
+        const handleSelect = async (val) => {
+            setValue(val, false);
+            clearSuggestions();
+            try {
+                const results = await getGeocode({ address: val });
+                const { lat, lng } = await getLatLng(results[0]);
+                fetchAddressFromCoords(lat, lng);
+                if (mapRef.current) {
+                    mapRef.current.panTo({ lat, lng });
+                }
+            } catch (err) {
+                console.error("Autocomplete error:", err);
+            }
+        };
+
+        return (
+            <div className="mb-2">
+                <input
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    placeholder="Search your address"
+                    className="form-control mb-2"
+                />
+                {status === 'OK' && (
+                    <ul className="list-group">
+                        {data.map(({ description }, idx) => (
+                            <li
+                                key={idx}
+                                className="list-group-item list-group-item-action"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleSelect(description)}
+                            >
+                                {description}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        );
+    };
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -49,7 +152,10 @@ function RestaurantProfile() {
                     city: data.city || '',
                     contact: data.contact || '',
                     priceLevel: data.priceLevel || '',
-                    cuisines: data.cuisines || []
+                    cuisines: data.cuisines || [],
+                    address: data.address || '',
+                    latitude: data.latitude || 28.6139,
+                    longitude: data.longitude || 77.2090
                 });
             } else {
                 alert("Profile not found.");
@@ -90,19 +196,16 @@ function RestaurantProfile() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
         try {
             const user = auth.currentUser;
             const docRef = doc(db, 'restaurantDetails', user.uid);
             const passwordHistoryCollection = collection(db, "oldPasswords", user.uid, "history");
 
             await updateDoc(docRef, {
-                name: formData.name,
-                city: formData.city,
-                contact: formData.contact,
-                priceLevel: formData.priceLevel,
-                cuisines: formData.cuisines
+                ...formData,
+                createdAt: new Date()
             });
+
             if (newPassword.length >= 6) {
                 const querySnapshot = await getDocs(passwordHistoryCollection);
                 const oldHashes = querySnapshot.docs.map(doc => doc.data().hash);
@@ -125,6 +228,7 @@ function RestaurantProfile() {
 
                 alert("Password updated successfully.");
             }
+
             alert("Profile updated successfully!");
             navigate('/restauranthome');
         } catch (error) {
@@ -197,16 +301,55 @@ function RestaurantProfile() {
                             ))}
                         </div>
                     </div>
-                    <div className="mb-3 text-start">
-                        <label className="form-label text-dark">New Password</label>
+
+                    <div className="mb-3">
+                        <label className="form-label">Restaurant Location</label>
+                        <AddressSearch />
+                        <button
+                            type="button"
+                            className="btn btn-outline-primary btn-sm mb-2"
+                            onClick={handleLocateMe}
+                        >
+                            📍 Locate Me
+                        </button>
+                        <LoadScript
+                            googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}
+                            libraries={['places']}  
+                        >
+                            <GoogleMap
+                                center={{ lat: formData.latitude, lng: formData.longitude }}
+                                zoom={13}
+                                mapContainerStyle={{ height: '300px', width: '100%' }}
+                                onLoad={(map) => (mapRef.current = map)}
+                                onClick={(e) => fetchAddressFromCoords(e.latLng.lat(), e.latLng.lng())}
+                            >
+                                <Marker
+                                    position={{ lat: formData.latitude, lng: formData.longitude }}
+                                    draggable
+                                    onDragEnd={(e) => fetchAddressFromCoords(e.latLng.lat(), e.latLng.lng())}
+                                />
+                            </GoogleMap>
+                        </LoadScript>
+
+                        {formData.address && (
+                            <div className="alert alert-secondary mt-2">
+                                <strong>Selected Address:</strong><br />
+                                {formData.address}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mb-3">
+                        <label className="form-label">New Password</label>
                         <input
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             placeholder="Leave blank to keep current"
-                            className="form-control border-dark text-dark bg-light"
+                            className="form-control border-dark"
                         />
                     </div>
+
                     <div className="d-grid mt-4">
                         <button type="submit" className="btn btn-dark">Save Changes</button>
                     </div>
