@@ -4,20 +4,12 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import Modal from 'react-bootstrap/Modal';
 import Button from 'react-bootstrap/Button';
 
-import {
-  collection,
-  getDocs,
-  getDoc,
-  doc,
-  getFirestore
-} from 'firebase/firestore';
-
 import back from '../../assets/back.png';
 import profileImg from '../../assets/profile.png';
 
 const NearByRestaurantsList = () => {
   const [visiblePlaces, setVisiblePlaces] = useState([]);
-  const [firestorePlaces, setFirestorePlaces] = useState([]);
+  const [backendRestaurants, setBackendRestaurants] = useState([]);
   const [radius, setRadius] = useState(10);
   const [minRating, setMinRating] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -27,7 +19,6 @@ const NearByRestaurantsList = () => {
 
   const latLngRef = useRef(null);
   const navigate = useNavigate();
-  const db = getFirestore();
 
   useEffect(() => {
     if (!sessionStorage.getItem('hasReloadedNearbyList')) {
@@ -63,24 +54,14 @@ const NearByRestaurantsList = () => {
 
   const fetchRestaurantMenu = async (restaurantId) => {
     try {
-      const docRef = doc(db, "restaurant-menus", restaurantId);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const menu = data.menu || []; // 🟢 Fix is here
-        setRestaurantMenu(menu);
-        console.log("Loaded menu for", restaurantId, ":", menu);
-      } else {
-        console.warn("No menu document found for:", restaurantId);
-        setRestaurantMenu([]);
-      }
+      const response = await fetch(`http://localhost:5003/api/restaurants/${restaurantId}/menu`);
+      const menu = await response.json();
+      setRestaurantMenu(menu);
     } catch (error) {
       console.error("Failed to fetch menu:", error);
       setRestaurantMenu([]);
     }
   };
-
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -97,7 +78,7 @@ const NearByRestaurantsList = () => {
   useEffect(() => {
     if (latLngRef.current) {
       fetchNearby(latLngRef.current);
-      fetchFirestoreRestaurants();
+      fetchBackendRestaurants();
     }
   }, [radius, minRating]);
 
@@ -110,7 +91,7 @@ const NearByRestaurantsList = () => {
         };
         latLngRef.current = userLatLng;
         fetchNearby(userLatLng);
-        fetchFirestoreRestaurants();
+        fetchBackendRestaurants();
       },
       () => alert("Geolocation failed.")
     );
@@ -179,23 +160,22 @@ const NearByRestaurantsList = () => {
     );
   };
 
-  const fetchFirestoreRestaurants = async () => {
+  const fetchBackendRestaurants = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "restaurantDetails"));
-      const restaurants = [];
-      querySnapshot.forEach(doc => {
-        const data = doc.data();
-        restaurants.push({
-          ...data,
-          firestoreId: doc.id,
-          photo: data.photo || "https://via.placeholder.com/100",
-          distance: "N/A",
-          position: data.location || { lat: 0, lng: 0 }
-        });
-      });
-      setFirestorePlaces(restaurants);
+      const response = await fetch("http://localhost:5003/api/restaurants");
+      const data = await response.json();
+
+      const formatted = data.map(r => ({
+        ...r,
+        firestoreId: r.id,
+        photo: r.photo || "https://via.placeholder.com/100",
+        distance: "N/A",
+        position: r.location || { lat: 0, lng: 0 }
+      }));
+
+      setBackendRestaurants(formatted);
     } catch (error) {
-      console.error("Error fetching Firestore restaurants:", error);
+      console.error("Error fetching restaurants from backend:", error);
     }
   };
 
@@ -241,12 +221,12 @@ const NearByRestaurantsList = () => {
           {loading ? (
             <span className="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
           ) : (
-            <strong>{firestorePlaces.length + visiblePlaces.length}</strong>
+            <strong>{backendRestaurants.length + visiblePlaces.length}</strong>
           )}
         </h4>
 
         <div className="list-group">
-          {[...firestorePlaces, ...visiblePlaces].map((place, index) => (
+          {[...backendRestaurants, ...visiblePlaces].map((place, index) => (
             <div
               key={index}
               className="list-group-item list-group-item-action d-flex align-items-center"
@@ -290,7 +270,6 @@ const NearByRestaurantsList = () => {
                 </li>
               ))}
             </ul>
-
           ) : (
             <p>No menu available.</p>
           )}
