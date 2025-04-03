@@ -34,6 +34,8 @@ public class RestaurantService {
                 restaurant.setLocation(Map.of("lat", lat, "lng", lng));
                 restaurant.setAddress(doc.getString("address")); // Add this line
                 restaurant.setRating(doc.getString("rating"));   // Already covered or add
+                List<String> cuisines = (List<String>) doc.get("cuisines");
+                restaurant.setCuisines(cuisines);
 
             } catch (Exception e) {
                 System.err.println("🔥 Failed to parse restaurant document ID: " + doc.getId());

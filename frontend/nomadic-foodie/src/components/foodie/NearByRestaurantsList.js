@@ -137,7 +137,9 @@ const NearByRestaurantsList = () => {
             const FOURSQUARE_SERVER = process.env.REACT_APP_FOURSQUARE_SERVER_URL || 'http://localhost:5003';
             const res = await fetch(`${FOURSQUARE_SERVER}/api/foursquare/cuisine?lat=${lat}&lng=${lng}`);
             const data = await res.json();
-            cuisine = data.cuisine;
+            const cuisines = data.cuisine.toString().split(',');
+            cuisine= Array.isArray(cuisines) ? cuisines : [cuisines|| "Unknown"]
+
           } catch (e) {
             console.warn("Cuisine fetch failed for:", place.name);
           }
@@ -190,13 +192,14 @@ const NearByRestaurantsList = () => {
           const distanceKm = (distanceMeters / 1000).toFixed(2);
 
           const numericRating = parseFloat(r.rating || 0);
-
           return {
             ...r,
             distance: distanceKm,
             position: { lat, lng },
             firestoreId: r.id,
-            rating: numericRating
+            rating: numericRating,
+            cuisine: Array.isArray(r.cuisines) ? r.cuisines : [r.cuisine || "Unknown"]
+
           };
         })
         .filter(r => {
@@ -278,10 +281,17 @@ const NearByRestaurantsList = () => {
                 <h5 className="mb-1">{place.name}</h5>
                 <p className="mb-1 text-muted">{place.address || 'Address unavailable'}</p>
                 <div className="d-flex align-items-center flex-wrap gap-2">
-                  <span className="badge bg-secondary">{place.cuisine || 'N/A'}</span>
+                  {Array.isArray(place.cuisine) && place.cuisine.length > 0 ? (
+                    place.cuisine.map((tag, i) => (
+                      <span key={i} className="badge bg-secondary">{tag}</span>
+                    ))
+                  ) : (
+                    <span className="badge bg-secondary">N/A</span>
+                  )}
                   <small className="text-muted">Rating: {place.rating || 'N/A'} ⭐</small>
                   <small className="text-muted">• {place.distance} km away</small>
                 </div>
+
               </div>
             </div>
           ))}
