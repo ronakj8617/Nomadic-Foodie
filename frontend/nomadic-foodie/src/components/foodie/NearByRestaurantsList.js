@@ -159,6 +159,7 @@ const NearByRestaurantsList = () => {
       }
     );
   };
+
   const fetchBackendRestaurants = async () => {
     try {
       const response = await fetch("http://localhost:5003/api/restaurants");
@@ -174,29 +175,44 @@ const NearByRestaurantsList = () => {
         latLngRef.current.lng
       );
 
-      const formatted = data.map(r => {
-        const lat = r.location?.lat;
-        const lng = r.location?.lng;
+      const formatted = data
+        .map(r => {
+          const lat = r.location?.lat;
+          const lng = r.location?.lng;
 
-        let distanceKm = "N/A";
-        if (lat && lng) {
-          const restLocation = new window.google.maps.LatLng(lat, lng);
-          const dist = window.google.maps.geometry.spherical.computeDistanceBetween(userLocation, restLocation);
-          distanceKm = (dist / 1000).toFixed(2);
-        }
-        return {
-          ...r,
-          distance: distanceKm,
-          position: { lat, lng },
-          firestoreId: r.id
-        };
-      });
+          if (!lat || !lng) return null;
+
+          const restaurantLocation = new window.google.maps.LatLng(lat, lng);
+          const distanceMeters = window.google.maps.geometry.spherical.computeDistanceBetween(
+            userLocation,
+            restaurantLocation
+          );
+          const distanceKm = (distanceMeters / 1000).toFixed(2);
+
+          const numericRating = parseFloat(r.rating || 0);
+
+          return {
+            ...r,
+            distance: distanceKm,
+            position: { lat, lng },
+            firestoreId: r.id,
+            rating: numericRating
+          };
+        })
+        .filter(r => {
+          if (!r) return false;
+          return (
+            parseFloat(r.distance) <= radius &&
+            (!minRating || r.rating >= minRating)
+          );
+        });
 
       setBackendRestaurants(formatted);
     } catch (error) {
       console.error("Error fetching restaurants from backend:", error);
     }
   };
+
 
   return (
     <div className="container text-center">
