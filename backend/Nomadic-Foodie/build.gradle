@@ -34,6 +34,16 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// build.gradle
+task buildDockerImage(type: Exec) {
+    dependsOn build
+    commandLine 'docker', 'build', '-t', 'nomadic_foodie_backend:latest', '.'
+}
+task execDockerImage(type: Exec){
+    commandLine 'docker', 'run', '--env-file', '.env', '-p', '5003:5003', 'nomadic_foodie_backend:latest'
+//    commandLine 'docker', 'run', '-e', 'FOURSQUARE_API_KEY=fsq3Zz4RYP56hBZ1/CdR24QecVD9N65RdHr1sLXY91NrElU=', '-p', '5003:5003', 'nomadic_foodie_backend:latest'
+}
+
 tasks.named('test') {
     useJUnitPlatform()
 }
