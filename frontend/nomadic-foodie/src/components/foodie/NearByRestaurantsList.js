@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Modal from 'react-bootstrap/Modal';
 import Button from 'react-bootstrap/Button';
-
+import locpin from '../../assets/location-pin.png';
+import destpin from '../../assets/destination-pin.png';
 import back from '../../assets/back.png';
 import profileImg from '../../assets/profile.png';
+import diningImg from '../../assets/dining.png'
 
 const NearByRestaurantsList = () => {
   const [visiblePlaces, setVisiblePlaces] = useState([]);
@@ -18,6 +20,7 @@ const NearByRestaurantsList = () => {
   const [restaurantMenu, setRestaurantMenu] = useState([]);
 
   const latLngRef = useRef(null);
+  const mapRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,20 +40,9 @@ const NearByRestaurantsList = () => {
       setSelectedRestaurant(place);
       fetchRestaurantMenu(place.firestoreId);
       setShowMenuModal(true);
-    } else {
-      navigate('/map', {
-        state: {
-          destination: place.position,
-          meta: {
-            name: place.name,
-            address: place.address,
-            rating: place.rating,
-            cuisine: place.cuisine
-          }
-        }
-      });
     }
   };
+
 
   const fetchRestaurantMenu = async (restaurantId) => {
     try {
@@ -68,10 +60,7 @@ const NearByRestaurantsList = () => {
     script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places,geometry`;
     script.async = true;
     script.defer = true;
-    script.onload = () => {
-      console.log("✅ Google Maps loaded");
-      getLocation();
-    };
+    script.onload = () => getLocation();
     document.body.appendChild(script);
   }, []);
 
@@ -83,6 +72,11 @@ const NearByRestaurantsList = () => {
   }, [radius, minRating]);
 
   const getLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation not supported.");
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const userLatLng = {
@@ -93,9 +87,22 @@ const NearByRestaurantsList = () => {
         fetchNearby(userLatLng);
         fetchBackendRestaurants();
       },
-      () => alert("Geolocation failed.")
+      (error) => {
+        console.error("Geolocation error:", error);
+        if (error.code === 2) { // kCLErrorLocationUnknown
+          alert("Location unknown. Please try again in a few seconds or check GPS settings.");
+        } else {
+          alert(`Geolocation failed: ${error.message}`);
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
     );
   };
+
 
   const fetchNearby = async (coords) => {
     setLoading(true);
@@ -129,17 +136,13 @@ const NearByRestaurantsList = () => {
             origin,
             place.geometry.location
           );
-          const photoUrl = place.photos?.[0]?.getUrl({ maxWidth: 100 }) || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+          const photoUrl = place.photos?.[0]?.getUrl({ maxWidth: 100 }) || diningImg;
 
-          // Fetch cuisine from Foursquare
-          let cuisine = "Unknown Cuisine";
+          let cuisine = ["Unknown"];
           try {
-            const FOURSQUARE_SERVER = process.env.REACT_APP_FOURSQUARE_SERVER_URL || 'http://localhost:5003';
-            const res = await fetch(`${FOURSQUARE_SERVER}/api/foursquare/cuisine?lat=${lat}&lng=${lng}`);
+            const res = await fetch(`http://localhost:5003/api/foursquare/cuisine?lat=${lat}&lng=${lng}`);
             const data = await res.json();
-            const cuisines = data.cuisine.toString().split(',');
-            cuisine= Array.isArray(cuisines) ? cuisines : [cuisines|| "Unknown"]
-
+            cuisine = data.cuisine?.toString().split(',').map(c => c.trim()) || ["Unknown"];
           } catch (e) {
             console.warn("Cuisine fetch failed for:", place.name);
           }
@@ -167,10 +170,7 @@ const NearByRestaurantsList = () => {
       const response = await fetch("http://localhost:5003/api/restaurants");
       const data = await response.json();
 
-      if (!Array.isArray(data)) {
-        console.error("Invalid API data (not array):", data);
-        return;
-      }
+      if (!Array.isArray(data)) return;
 
       const userLocation = new window.google.maps.LatLng(
         latLngRef.current.lat,
@@ -181,7 +181,6 @@ const NearByRestaurantsList = () => {
         .map(r => {
           const lat = r.location?.lat;
           const lng = r.location?.lng;
-
           if (!lat || !lng) return null;
 
           const restaurantLocation = new window.google.maps.LatLng(lat, lng);
@@ -191,24 +190,17 @@ const NearByRestaurantsList = () => {
           );
           const distanceKm = (distanceMeters / 1000).toFixed(2);
 
-          const numericRating = parseFloat(r.rating || 0);
+          const cuisines = Array.isArray(r.cuisines) ? r.cuisines : [r.cuisine || "Unknown"];
           return {
             ...r,
             distance: distanceKm,
             position: { lat, lng },
             firestoreId: r.id,
-            rating: numericRating,
-            cuisine: Array.isArray(r.cuisines) ? r.cuisines : [r.cuisine || "Unknown"]
-
+            rating: parseFloat(r.rating || 0),
+            cuisine: cuisines
           };
         })
-        .filter(r => {
-          if (!r) return false;
-          return (
-            parseFloat(r.distance) <= radius &&
-            (!minRating || r.rating >= minRating)
-          );
-        });
+        .filter(r => r && parseFloat(r.distance) <= radius && (!minRating || r.rating >= minRating));
 
       setBackendRestaurants(formatted);
     } catch (error) {
@@ -216,85 +208,190 @@ const NearByRestaurantsList = () => {
     }
   };
 
+  useEffect(() => {
+    if (!window.google || !latLngRef.current) return;
+
+    const allRestaurants = [...backendRestaurants, ...visiblePlaces];
+    if (allRestaurants.length === 0) return;
+
+    const map = new window.google.maps.Map(document.getElementById("restaurantMap"), {
+      center: latLngRef.current,
+      zoom: 14,
+    });
+
+    mapRef.current = map;
+
+    new window.google.maps.Marker({
+      position: latLngRef.current,
+      map,
+      title: "You are here",
+      icon: {
+        url: locpin,
+        scaledSize: new window.google.maps.Size(40, 40),
+      },
+    });
+
+
+    const handleMarkerClick = (place) => {
+      setSelectedRestaurant(place);
+      if (place.firestoreId) fetchRestaurantMenu(place.firestoreId);
+      setShowMenuModal(true);
+    };
+
+    allRestaurants.forEach(place => {
+      if (!place.position?.lat || !place.position?.lng) return;
+
+      const marker = new window.google.maps.Marker({
+        position: place.position,
+        map,
+        title: place.name,
+        icon: {
+          url: destpin,
+          scaledSize: new window.google.maps.Size(40, 40),
+        },
+      });
+
+      marker.addListener("click", () => {
+        if (place.firestoreId) {
+          setSelectedRestaurant(place);
+          fetchRestaurantMenu(place.firestoreId);
+          setShowMenuModal(true);
+        }
+        navigate('/map', {
+          state: {
+            destination: place.position,
+            meta: {
+              name: place.name,
+              address: place.address,
+              rating: place.rating,
+              cuisine: place.cuisine
+            }
+          }
+        });
+
+      });
+    });
+  }, [backendRestaurants, visiblePlaces]);
 
   return (
-    <div className="container text-center">
+    <div className="container-fluid">
+      <style>
+        {`
+          body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          }
+          h2 { font-weight: 600; }
+          .badge {
+            font-size: 0.75rem;
+            padding: 0.5em;
+            border-radius: 6px;
+          }
+          .list-group-item:hover {
+            background-color: #f1f1f1;
+          }
+          #restaurantMap {
+            border: 2px solid black;
+            border-radius: 8px;
+          }
+        `}
+      </style>
+
       <div className="row align-items-center position-relative">
-        <div className="col-auto" style={{ cursor: 'pointer' }} onClick={goToHome}>
-          <img src={back} style={{ width: '2rem', height: '2rem', margin: '10px' }} alt="Back" />
+        <div className="col-auto" onClick={goToHome} style={{ cursor: 'pointer' }}>
+          <img src={back} alt="Back" style={{ width: '2rem', height: '2rem', margin: '10px' }} />
         </div>
-        <div className="col text-center">
-          <h2 className="m-0">Nearby Restaurants</h2>
-        </div>
-        <div className="col-auto" style={{ cursor: 'pointer' }} onClick={goToProfile}>
-          <img src={profileImg} style={{ width: '2rem', height: '2rem', margin: '10px' }} alt="UserProfile" />
+        <div className="col text-center"><h2 className="m-0">Nearby Restaurants</h2></div>
+        <div className="col-auto" onClick={goToProfile} style={{ cursor: 'pointer' }}>
+          <img src={profileImg} alt="UserProfile" style={{ width: '2rem', height: '2rem', margin: '10px' }} />
         </div>
       </div>
       <hr />
 
       <div className="container mb-4">
         <div className="row g-3">
-          <div className="col-md-6 text-start">
+          <div className="col-md-6">
             <label className="form-label fw-bold">Filter by Radius (km)</label>
-            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }} value={radius} onChange={(e) => setRadius(Number(e.target.value))}>
-              {[1, 3, 5, 10, 15, 20, 30, 50].map(r => (
-                <option key={r} value={r}>{r} km</option>
-              ))}
+            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }}  value={radius} onChange={(e) => setRadius(Number(e.target.value))}>
+              {[1, 3, 5, 10, 15, 20, 30, 50].map(r => <option key={r} value={r}>{r} km</option>)}
             </select>
           </div>
-          <div className="col-md-6 text-start">
+          <div className="col-md-6">
             <label className="form-label fw-bold">Minimum Rating</label>
-            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }} value={minRating} onChange={(e) => setMinRating(Number(e.target.value))}>
-              {[0, 3, 4, 4.5].map(r => (
-                <option key={r} value={r}>{r} ⭐</option>
-              ))}
+            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }}  value={minRating} onChange={(e) => setMinRating(Number(e.target.value))}>
+              {[0, 3, 4, 4.5].map(r => <option key={r} value={r}>{r} ⭐</option>)}
             </select>
           </div>
         </div>
       </div>
-
-      <div className="container mt-4" style={{ maxWidth: '700px' }}>
-        <h4 className="mb-3 text-start">
-          Restaurants Found:{" "}
-          {loading ? (
-            <span className="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+      {/* <div className="col text-center">
+        <h5 className="mb-3 text-start">
+          Restaurants Found: {loading ? (
+            <span className="spinner-border spinner-border-sm text-primary" role="status"></span>
           ) : (
             <strong>{backendRestaurants.length + visiblePlaces.length}</strong>
           )}
-        </h4>
+        </h5>
+      </div> */}
+      <div className="d-flex flex-row gap-3" style={{ height: '80vh' }}>
 
-        <div className="list-group">
-          {[...backendRestaurants, ...visiblePlaces].map((place, index) => (
-            <div
-              key={index}
-              className="list-group-item list-group-item-action d-flex align-items-center"
-              style={{ cursor: 'pointer' }}
-              onClick={() => handleClick(place)}
-            >
-              <img
-                src={place.photo ? place.photo : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"}
-                alt="restaurant"
-                className="me-3"
-                style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px' }}
-              />
-              <div className="text-start">
-                <h5 className="mb-1">{place.name}</h5>
-                <p className="mb-1 text-muted">{place.address || 'Address unavailable'}</p>
-                <div className="d-flex align-items-center flex-wrap gap-2">
-                  {Array.isArray(place.cuisine) && place.cuisine.length > 0 ? (
-                    place.cuisine.map((tag, i) => (
-                      <span key={i} className="badge bg-secondary">{tag}</span>
-                    ))
-                  ) : (
-                    <span className="badge bg-secondary">N/A</span>
-                  )}
-                  <small className="text-muted">Rating: {place.rating || 'N/A'} ⭐</small>
-                  <small className="text-muted">• {place.distance} km away</small>
+        {/* Scrollable List */}
+        <div className="flex-fill" style={{ maxWidth: '50%', overflowY: 'auto', borderRadius: '8px', paddingRight: '8px' }}>
+
+
+          <div className="list-group" style={{ border: '2px solid black' }}>
+            {[...backendRestaurants, ...visiblePlaces].map((place, index) => (
+              <div key={index} className="list-group-item list-group-item-action d-flex align-items-start">
+                <img src={place.photo ? place.photo : diningImg} alt="restaurant" className="me-3" style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px' }} />
+                <div className="w-100">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <h5 className="mb-1">{place.name}</h5>
+                    <div className="d-flex gap-2">
+                      {place.firestoreId && (
+                        <button
+                          className="btn btn-sm btn-dark"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedRestaurant(place);
+                            fetchRestaurantMenu(place.firestoreId);
+                            setShowMenuModal(true);
+                          }}
+                        >
+                          Menu
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-sm btn-outline-dark"
+                        title="View on map"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.google && place.position && mapRef.current) {
+                            mapRef.current.setCenter(place.position);
+                            mapRef.current.setZoom(17);
+                          }
+                        }}
+                      >
+                        📍
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mb-1 text-muted">{place.address || 'Address unavailable'}</p>
+                  <div className="d-flex align-items-center flex-wrap gap-2">
+                    {place.cuisine?.map((tag, i) => (
+                      <span key={i} className="badge bg-dark">{tag}</span>
+                    ))}
+                    <small className="text-muted">Rating: {place.rating || 'N/A'} ⭐</small>
+                    <small className="text-muted">• {place.distance} km away</small>
+                  </div>
                 </div>
-
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+
+        {/* Map */}
+        <div className="flex-fill" style={{ minWidth: '50%' }}>
+          <div id="restaurantMap" style={{ height: '100%', width: '100%', border: '2px solid black', borderRadius: '8px' }}></div>
         </div>
       </div>
 
@@ -309,20 +406,14 @@ const NearByRestaurantsList = () => {
                 <li key={index} className="list-group-item">
                   <div className="fw-bold">{item.name} - ₹{item.price}</div>
                   <div className="text-muted">{item.description}</div>
-                  <small>
-                    Category: {item.category} | {item.isVeg ? "Veg 🥬" : "Non-Veg 🍗"}
-                  </small>
+                  <small>Category: {item.category} | {item.isVeg ? "Veg 🥬" : "Non-Veg 🍗"}</small>
                 </li>
               ))}
             </ul>
-          ) : (
-            <p>No menu available.</p>
-          )}
+          ) : <p>No menu available.</p>}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowMenuModal(false)}>
-            Close
-          </Button>
+          <Button variant="secondary" onClick={() => setShowMenuModal(false)}>Close</Button>
         </Modal.Footer>
       </Modal>
     </div>

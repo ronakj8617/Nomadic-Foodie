@@ -4,6 +4,8 @@ import { getFirestore, collection, getDocs, updateDoc, doc } from 'firebase/fire
 import { useNavigate } from 'react-router-dom';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import locpin from '../../assets/location-pin.png';
+import destpin from '../../assets/destination-pin.png';
 
 import back from '../../assets/back.png';
 import profileImg from '../../assets/profile.png';
@@ -165,11 +167,14 @@ const VisitHistory = () => {
               }
               zoom={selectedVisit ? 16 : 13}
             >
-              <Marker
+              {/* <Marker
                 position={userLocation}
                 title="You are here"
-                icon={{ url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png' }}
-              />
+                icon={{
+                  url: locpin,
+                  scaledSize: new window.google.maps.Size(40, 40) 
+                }}
+              /> */}
               {visits.map(
                 (visit) =>
                   visit.lat &&

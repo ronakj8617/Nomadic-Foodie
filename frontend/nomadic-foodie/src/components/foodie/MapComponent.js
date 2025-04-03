@@ -7,6 +7,7 @@ import locpin from '../../assets/location-pin.png';
 import destpin from '../../assets/destination-pin.png';
 import { getFirestore, doc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import diningImg from '../../assets/dining.png'
 
 const MapComponent = () => {
   const mapRef = useRef(null);
@@ -65,12 +66,20 @@ const MapComponent = () => {
             rating: 'N/A',
             cuisine: 'Unknown'
           };
-          const cuisine = await fetchCuisineFromFoursquare(
-            location.state.destination.lat,
-            location.state.destination.lng
-          );
+
+          let cuisine = meta.cuisine;
+
+          // If it's missing or not an array (i.e., not from Firestore), fetch it from Foursquare
+          if (!cuisine || (typeof cuisine === 'string' && cuisine === 'Unknown') || Array.isArray(cuisine) === false) {
+            cuisine = await fetchCuisineFromFoursquare(
+              location.state.destination.lat,
+              location.state.destination.lng
+            );
+          }
+
           setRestaurantDetails({ ...meta, cuisine });
         };
+
 
         fetchMeta();
         getLocation();
@@ -183,7 +192,7 @@ const MapComponent = () => {
   const fetchCuisineFromFoursquare = async (lat, lng) => {
     try {
       const FOURSQUARE_SERVER = process.env.REACT_APP_FOURSQUARE_SERVER_URL || 'http://localhost:5003';
- 
+
       const res = await fetch(`${FOURSQUARE_SERVER}/api/foursquare/cuisine?lat=${lat}&lng=${lng}`);
       const data = await res.json();
       return data.cuisine || "Unknown Cuisine";
@@ -231,7 +240,7 @@ const MapComponent = () => {
           address: nearest.vicinity || 'Unknown',
           rating: nearest.rating || 'N/A',
           cuisine,
-          photo: nearest.photos?.[0]?.getUrl({ maxWidth: 400 }) || null
+          photo: nearest.photos?.[0]?.getUrl({ maxWidth: 400 }) || diningImg
         };
 
         destinationRef.current = { lat: loc.lat(), lng: loc.lng() };
@@ -367,12 +376,18 @@ const MapComponent = () => {
       placeName: restaurantDetails.name,
       address: restaurantDetails.address,
       cuisine: restaurantDetails.cuisine,
-      allCuisines: restaurantDetails.cuisine?.split(',').map(c => c.trim()) ?? [],
+      allCuisines: Array.isArray(restaurantDetails.cuisine)
+        ? restaurantDetails.cuisine
+        : (restaurantDetails.cuisine || "")
+          .split(',')
+          .map(c => c.trim())
+          .filter(Boolean),
       rating,
       timestamp: now,
       lat: destinationRef.current.lat,
       lng: destinationRef.current.lng
     });
+
 
     alert('✅ Thanks for rating!');
   };
@@ -412,12 +427,21 @@ const MapComponent = () => {
           {restaurantDetails ? (
             <>
               {restaurantDetails.photo && (
-                <img src={restaurantDetails.photo} alt="Restaurant" style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }} />
+                <img src={restaurantDetails.photo ? restaurantDetails.photo : diningImg} alt="Restaurant" style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }} />
               )}
               <h5>{restaurantDetails.name}</h5>
               <p><strong>Address:</strong> {restaurantDetails.address}</p>
               <p><strong>Rating:</strong> {restaurantDetails.rating} ⭐</p>
-              <p><strong>Cuisine:</strong> {restaurantDetails.cuisine}</p>
+              <div>
+                <strong>Cuisine:</strong>
+                <div className="d-flex flex-wrap gap-1 mt-1">
+                  {Array.isArray(restaurantDetails.cuisine)
+                    ? restaurantDetails.cuisine.map((tag, i) => (
+                      <span key={i} className="badge bg-dark">{tag}</span>
+                    ))
+                    : <span>{restaurantDetails.cuisine}</span>}
+                </div>
+              </div>
               {routeSummary && <p><strong>ETA:</strong> {routeSummary}</p>}
               <hr />
               <button className="btn btn-dark w-100 mb-2" onClick={() => getLocation(false, true)}>📍 Locate Me</button>
