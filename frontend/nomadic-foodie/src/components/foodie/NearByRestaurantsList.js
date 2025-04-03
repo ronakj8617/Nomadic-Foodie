@@ -294,6 +294,11 @@ const NearByRestaurantsList = () => {
             border: 2px solid black;
             border-radius: 8px;
           }
+          .card:hover {
+            transform: scale(1.01);
+            transition: 0.2s ease-in-out;
+          }
+
         `}
       </style>
 
@@ -312,13 +317,13 @@ const NearByRestaurantsList = () => {
         <div className="row g-3">
           <div className="col-md-6">
             <label className="form-label fw-bold">Filter by Radius (km)</label>
-            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }}  value={radius} onChange={(e) => setRadius(Number(e.target.value))}>
+            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }} value={radius} onChange={(e) => setRadius(Number(e.target.value))}>
               {[1, 3, 5, 10, 15, 20, 30, 50].map(r => <option key={r} value={r}>{r} km</option>)}
             </select>
           </div>
           <div className="col-md-6">
             <label className="form-label fw-bold">Minimum Rating</label>
-            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }}  value={minRating} onChange={(e) => setMinRating(Number(e.target.value))}>
+            <select className="form-select" style={{ backgroundColor: "black", color: 'white' }} value={minRating} onChange={(e) => setMinRating(Number(e.target.value))}>
               {[0, 3, 4, 4.5].map(r => <option key={r} value={r}>{r} ⭐</option>)}
             </select>
           </div>
@@ -395,26 +400,77 @@ const NearByRestaurantsList = () => {
         </div>
       </div>
 
-      <Modal show={showMenuModal} onHide={() => setShowMenuModal(false)}>
+      <Modal show={showMenuModal} onHide={() => setShowMenuModal(false)} style={{ border: '2px solid black', borderRadius: '10px' }}>
         <Modal.Header closeButton>
           <Modal.Title>{selectedRestaurant?.name} - Menu</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body
+          style={{
+            backgroundColor: "#f8f9fa",
+            maxHeight: "70vh",
+            overflowY: "auto",
+          }}
+        >
           {restaurantMenu.length > 0 ? (
-            <ul className="list-group">
-              {restaurantMenu.map((item, index) => (
-                <li key={index} className="list-group-item">
-                  <div className="fw-bold">{item.name} - ₹{item.price}</div>
-                  <div className="text-muted">{item.description}</div>
-                  <small>Category: {item.category} | {item.isVeg ? "Veg 🥬" : "Non-Veg 🍗"}</small>
-                </li>
-              ))}
-            </ul>
-          ) : <p>No menu available.</p>}
+            Object.entries(
+              restaurantMenu.reduce((acc, item) => {
+                const category = item.category || "Uncategorized";
+                if (!acc[category]) acc[category] = [];
+                acc[category].push(item);
+                return acc;
+              }, {})
+            ).map(([category, items], idx) => (
+              <div key={idx} className="mb-4">
+                <p className="fw-bold border-bottom pb-1 mb-3">{category}</p>
+                <div className="row row-cols-1 g-3">
+                  {items
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((item, i) => (
+                      <div className="col" key={i}>
+                        <div className="card shadow-sm border-0 h-100">
+                          <div
+                            className="card-body"
+                            style={{
+                              border: "2px solid black",
+                              borderRadius: "9px",
+                            }}
+                          >
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <h6 className="card-title mb-0 fw-semibold">
+                                {item.name}
+                              </h6>
+                              <span className="fw-bold text-success">
+                                ₹{item.price}
+                              </span>
+                            </div>
+                            <p
+                              className="card-text text-dark mb-2"
+                              style={{ fontSize: "0.9rem" }}
+                            >
+                              {item.description || "No description available."}
+                            </p>
+                            <div className="d-flex justify-content-between align-items-center">
+                              <span className="badge bg-light text-dark border">
+                                {item.isVeg ? "🟢 Veg" : "🔴 Non-Veg"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-muted">No menu available.</p>
+          )}
         </Modal.Body>
+
+
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowMenuModal(false)}>Close</Button>
         </Modal.Footer>
+
       </Modal>
     </div>
   );
