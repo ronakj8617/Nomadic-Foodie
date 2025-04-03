@@ -61,7 +61,19 @@ public class RestaurantService {
             m.setPrice(Double.parseDouble(item.get("price").toString()));
             m.setDescription((String) item.get("description"));
             m.setCategory((String) item.get("category"));
-            m.setVeg(Boolean.TRUE.equals(item.get("isVeg")));
+            Object isVegRaw = item.get("isVeg");
+            boolean isVeg = false;
+
+            if (isVegRaw instanceof Boolean) {
+                isVeg = (Boolean) isVegRaw;
+            } else if (isVegRaw instanceof String) {
+                isVeg = ((String) isVegRaw).equalsIgnoreCase("true");
+            } else if (isVegRaw instanceof Number) {
+                isVeg = ((Number) isVegRaw).intValue() == 1;
+            }
+
+            m.setVeg(isVeg);
+
             items.add(m);
         }
 

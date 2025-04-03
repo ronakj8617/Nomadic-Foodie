@@ -43,17 +43,18 @@ const NearByRestaurantsList = () => {
     }
   };
 
-
   const fetchRestaurantMenu = async (restaurantId) => {
     try {
       const response = await fetch(`http://localhost:5003/api/restaurants/${restaurantId}/menu`);
       const menu = await response.json();
+      console.log("📦 Received menu:", menu); // 👈 Debug log
       setRestaurantMenu(menu);
     } catch (error) {
       console.error("Failed to fetch menu:", error);
       setRestaurantMenu([]);
     }
   };
+
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -404,6 +405,8 @@ const NearByRestaurantsList = () => {
         <Modal.Header closeButton>
           <Modal.Title>{selectedRestaurant?.name} - Menu</Modal.Title>
         </Modal.Header>
+        {/* <pre>{JSON.stringify(restaurantMenu, null, 2)}</pre> */}
+
         <Modal.Body
           style={{
             backgroundColor: "#f8f9fa",
@@ -450,8 +453,12 @@ const NearByRestaurantsList = () => {
                               {item.description || "No description available."}
                             </p>
                             <div className="d-flex justify-content-between align-items-center">
+
                               <span className="badge bg-light text-dark border">
-                                {item.isVeg ? "🟢 Veg" : "🔴 Non-Veg"}
+                                <span className="badge bg-light text-dark border">
+                                  {item.veg ? "🟢 Veg" : "🔴 Non-Veg"}
+                                </span>
+
                               </span>
                             </div>
                           </div>
