@@ -276,7 +276,7 @@ const NearByRestaurantsList = () => {
               />
               <div className="text-start">
                 <h5 className="mb-1">{place.name}</h5>
-                <p className="mb-1 text-muted">{place.address}</p>
+                <p className="mb-1 text-muted">{place.address || 'Address unavailable'}</p>
                 <div className="d-flex align-items-center flex-wrap gap-2">
                   <span className="badge bg-secondary">{place.cuisine || 'N/A'}</span>
                   <small className="text-muted">Rating: {place.rating || 'N/A'} ⭐</small>

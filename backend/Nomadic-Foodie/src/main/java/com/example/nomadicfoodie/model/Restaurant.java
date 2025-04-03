@@ -13,6 +13,7 @@ public class Restaurant {
     private String photo;
     private String priceLevel;
     private String role;
+    private String address;
 
     private Object rating;
     private Object latitude;

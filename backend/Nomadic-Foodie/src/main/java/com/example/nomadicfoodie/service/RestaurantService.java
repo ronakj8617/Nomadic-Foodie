@@ -31,6 +31,10 @@ public class RestaurantService {
 
                 restaurant.setLocation(Map.of("lat", lat, "lng", lng));
                 restaurants.add(restaurant);
+                restaurant.setLocation(Map.of("lat", lat, "lng", lng));
+                restaurant.setAddress(doc.getString("address")); // Add this line
+                restaurant.setRating(doc.getString("rating"));   // Already covered or add
+
             } catch (Exception e) {
                 System.err.println("🔥 Failed to parse restaurant document ID: " + doc.getId());
                 e.printStackTrace(); // ✅ This should help pinpoint the exact issue
