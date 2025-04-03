@@ -129,7 +129,7 @@ const NearByRestaurantsList = () => {
             origin,
             place.geometry.location
           );
-          const photoUrl = place.photos?.[0]?.getUrl({ maxWidth: 100 }) || "https://via.placeholder.com/100";
+          const photoUrl = place.photos?.[0]?.getUrl({ maxWidth: 100 }) || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
 
           // Fetch cuisine from Foursquare
           let cuisine = "Unknown Cuisine";
@@ -159,19 +159,38 @@ const NearByRestaurantsList = () => {
       }
     );
   };
-
   const fetchBackendRestaurants = async () => {
     try {
       const response = await fetch("http://localhost:5003/api/restaurants");
       const data = await response.json();
 
-      const formatted = data.map(r => ({
-        ...r,
-        firestoreId: r.id,
-        photo: r.photo || "https://via.placeholder.com/100",
-        distance: "N/A",
-        position: r.location || { lat: 0, lng: 0 }
-      }));
+      if (!Array.isArray(data)) {
+        console.error("Invalid API data (not array):", data);
+        return;
+      }
+
+      const userLocation = new window.google.maps.LatLng(
+        latLngRef.current.lat,
+        latLngRef.current.lng
+      );
+
+      const formatted = data.map(r => {
+        const lat = r.location?.lat;
+        const lng = r.location?.lng;
+
+        let distanceKm = "N/A";
+        if (lat && lng) {
+          const restLocation = new window.google.maps.LatLng(lat, lng);
+          const dist = window.google.maps.geometry.spherical.computeDistanceBetween(userLocation, restLocation);
+          distanceKm = (dist / 1000).toFixed(2);
+        }
+        return {
+          ...r,
+          distance: distanceKm,
+          position: { lat, lng },
+          firestoreId: r.id
+        };
+      });
 
       setBackendRestaurants(formatted);
     } catch (error) {
@@ -234,7 +253,7 @@ const NearByRestaurantsList = () => {
               onClick={() => handleClick(place)}
             >
               <img
-                src={place.photo}
+                src={place.photo ? place.photo : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"}
                 alt="restaurant"
                 className="me-3"
                 style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px' }}

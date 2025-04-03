@@ -17,15 +17,27 @@ public class RestaurantService {
     public List<Restaurant> getAllRestaurants() throws Exception {
         Firestore db = FirestoreClient.getFirestore();
         ApiFuture<QuerySnapshot> query = db.collection("restaurantDetails").get();
-        List<QueryDocumentSnapshot> docs = query.get().getDocuments();
+        List<QueryDocumentSnapshot> documents = query.get().getDocuments();
 
-        List<Restaurant> result = new ArrayList<>();
-        for (QueryDocumentSnapshot doc : docs) {
-            Restaurant r = doc.toObject(Restaurant.class);
-            r.setId(doc.getId());
-            result.add(r);
+        List<Restaurant> restaurants = new ArrayList<>();
+
+        for (QueryDocumentSnapshot doc : documents) {
+            try {
+                Restaurant restaurant = doc.toObject(Restaurant.class);
+                restaurant.setId(doc.getId());
+
+                double lat = safeDouble(restaurant.getLatitude());
+                double lng = safeDouble(restaurant.getLongitude());
+
+                restaurant.setLocation(Map.of("lat", lat, "lng", lng));
+                restaurants.add(restaurant);
+            } catch (Exception e) {
+                System.err.println("🔥 Failed to parse restaurant document ID: " + doc.getId());
+                e.printStackTrace(); // ✅ This should help pinpoint the exact issue
+            }
         }
-        return result;
+
+        return restaurants;
     }
 
     public List<MenuItem> getMenuByRestaurantId(String restaurantId) throws Exception {
@@ -49,4 +61,17 @@ public class RestaurantService {
 
         return items;
     }
+
+    double safeDouble(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Double.parseDouble((String) value);
+            } catch (Exception ignored) {}
+        }
+        return 0.0;
+    }
+
 }
