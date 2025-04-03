@@ -174,6 +174,7 @@ function RestaurantsSignUp() {
         priceLevel: signupData.priceLevel,
         cuisines,
         role: 'restaurant',
+        rating: '5',
         address,
         latitude: markerPosition.lat,
         longitude: markerPosition.lng,
@@ -198,6 +199,7 @@ function RestaurantsSignUp() {
         name: user.displayName || '',
         email: user.email,
         createdAt: new Date(),
+        rating: '5',
         cuisines,
         role: 'restaurant'
       });
