@@ -22,6 +22,9 @@ const NearByRestaurantsList = () => {
   const latLngRef = useRef(null);
   const mapRef = useRef(null);
   const navigate = useNavigate();
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [vegFilter, setVegFilter] = useState("all"); // "all", "veg", "nonveg"
+
 
   useEffect(() => {
     if (!sessionStorage.getItem('hasReloadedNearbyList')) {
@@ -47,14 +50,15 @@ const NearByRestaurantsList = () => {
     try {
       const response = await fetch(`http://localhost:5003/api/restaurants/${restaurantId}/menu`);
       const menu = await response.json();
-      console.log("📦 Received menu:", menu); // 👈 Debug log
       setRestaurantMenu(menu);
+      if (menu.length > 0) {
+        setSelectedCategory(menu[0].category || "Uncategorized");
+      }
     } catch (error) {
       console.error("Failed to fetch menu:", error);
       setRestaurantMenu([]);
     }
   };
-
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -406,68 +410,100 @@ const NearByRestaurantsList = () => {
           <Modal.Title>{selectedRestaurant?.name} - Menu</Modal.Title>
         </Modal.Header>
         {/* <pre>{JSON.stringify(restaurantMenu, null, 2)}</pre> */}
-
-        <Modal.Body
-          style={{
-            backgroundColor: "#f8f9fa",
-            maxHeight: "70vh",
-            overflowY: "auto",
-          }}
-        >
+        <Modal.Body style={{ backgroundColor: "#f8f9fa", maxHeight: "70vh", overflowY: "auto" }}>
           {restaurantMenu.length > 0 ? (
-            Object.entries(
-              restaurantMenu.reduce((acc, item) => {
-                const category = item.category || "Uncategorized";
-                if (!acc[category]) acc[category] = [];
-                acc[category].push(item);
-                return acc;
-              }, {})
-            ).map(([category, items], idx) => (
-              <div key={idx} className="mb-4">
-                <p className="fw-bold border-bottom pb-1 mb-3">{category}</p>
-                <div className="row row-cols-1 g-3">
-                  {items
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((item, i) => (
-                      <div className="col" key={i}>
-                        <div className="card shadow-sm border-0 h-100">
-                          <div
-                            className="card-body"
-                            style={{
-                              border: "2px solid black",
-                              borderRadius: "9px",
-                            }}
-                          >
-                            <div className="d-flex justify-content-between align-items-start mb-2">
-                              <h6 className="card-title mb-0 fw-semibold">
-                                {item.name}
-                              </h6>
-                              <span className="fw-bold text-success">
-                                ₹{item.price}
-                              </span>
-                            </div>
-                            <p
-                              className="card-text text-dark mb-2"
-                              style={{ fontSize: "0.9rem" }}
-                            >
-                              {item.description || "No description available."}
-                            </p>
-                            <div className="d-flex justify-content-between align-items-center">
+            <>
+              {/* Category Tabs */}
+              <ul className="nav nav-tabs mb-3" role="tablist">
+                {Object.entries(
+                  restaurantMenu.reduce((acc, item) => {
+                    const category = item.category || "Uncategorized";
+                    if (!acc[category]) acc[category] = [];
+                    acc[category].push(item);
+                    return acc;
+                  }, {})
+                ).map(([category]) => (
+                  <li className="nav-item" key={category} style={{ borderRadius: '9px', marginRight: '7px' }}>
+                    <button
+                      className="nav-link"
+                      style={{
+                        backgroundColor: selectedCategory === category ? 'black' : 'white',
+                        color: selectedCategory === category ? 'white' : 'black',
+                        border: '1px solid black',
+                        borderRadius: '8px',
+                        marginRight: '6px',
+                        fontWeight: '500',
+                      }}
+                      onClick={() => setSelectedCategory(category)}
+                    >
+                      {category}
+                    </button>
 
-                              <span className="badge bg-light text-dark border">
-                                <span className="badge bg-light text-dark border">
-                                  {item.veg ? "🟢 Veg" : "🔴 Non-Veg"}
-                                </span>
+                  </li>
+                ))}
+              </ul>
 
-                              </span>
-                            </div>
+              {/* Veg / Non-Veg Filter */}
+              <div className="btn-group mb-3" role="group">
+                <button
+                  className={`btn btn-sm ${vegFilter === "all" ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setVegFilter("all")}
+                >
+                  All
+                </button>
+                <button
+                  className={`btn btn-sm ${vegFilter === "veg" ? "btn-success" : "btn-outline-success"}`}
+                  onClick={() => setVegFilter("veg")}
+                >
+                  Veg 🥦
+                </button>
+                <button
+                  className={`btn btn-sm ${vegFilter === "nonveg" ? "btn-danger" : "btn-outline-danger"}`}
+                  onClick={() => setVegFilter("nonveg")}
+                >
+                  Non-Veg 🍗
+                </button>
+              </div>
+
+              {/* Filtered Items */}
+              <div className="row row-cols-1 g-3">
+                {restaurantMenu
+                  .filter(item => selectedCategory === null || item.category === selectedCategory)
+                  .filter(item =>
+                    vegFilter === "all"
+                      ? true
+                      : vegFilter === "veg"
+                        ? item.veg === true
+                        : item.veg === false
+                  )
+                  .map((item, i) => (
+                    <div className="col" key={i}>
+                      <div className="card shadow-sm border-0 h-100">
+                        <div
+                          className="card-body"
+                          style={{
+                            border: "2px solid black",
+                            borderRadius: "9px",
+                          }}
+                        >
+                          <div className="d-flex justify-content-between align-items-start mb-2">
+                            <h6 className="card-title mb-0 fw-semibold">{item.name}</h6>
+                            <span className="fw-bold text-success">₹{item.price}</span>
+                          </div>
+                          <p className="card-text text-dark mb-2" style={{ fontSize: "0.9rem" }}>
+                            {item.description || "No description available."}
+                          </p>
+                          <div className="d-flex justify-content-between align-items-center">
+                            <span className="badge bg-light text-dark border">
+                              {item.veg ? "🟢 Veg" : "🔴 Non-Veg"}
+                            </span>
                           </div>
                         </div>
                       </div>
-                    ))}
-                </div>
+                    </div>
+                  ))}
               </div>
-            ))
+            </>
           ) : (
             <p className="text-muted">No menu available.</p>
           )}
@@ -475,7 +511,7 @@ const NearByRestaurantsList = () => {
 
 
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowMenuModal(false)}>Close</Button>
+          <Button variant="dark" onClick={() => setShowMenuModal(false)}>Close</Button>
         </Modal.Footer>
 
       </Modal>
